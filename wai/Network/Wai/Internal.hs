@@ -7,6 +7,7 @@ module Network.Wai.Internal where
 
 import           Data.ByteString.Builder      (Builder)
 import qualified Data.ByteString              as B hiding (pack)
+import           Data.Dynamic                 (Dynamic)
 import           Data.Text                    (Text)
 import           Data.Typeable                (Typeable)
 import           Data.Vault.Lazy              (Vault)
@@ -67,6 +68,9 @@ data Request = Request {
   ,  requestBody          :: IO B.ByteString
   -- | A location for arbitrary data to be shared by applications and middleware.
   ,  vault                 :: Vault
+  -- | Access to underlying context opaque data set by user applications
+  -- to link this request to a specific connection.
+  ,  requestConnContext    :: Maybe Dynamic
   -- | The size of the request body. In the case of a chunked request body,
   -- this may be unknown.
   --

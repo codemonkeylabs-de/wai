@@ -11,6 +11,7 @@ module Network.Wai.Handler.Warp.HTTP2.Request (
 import Control.Arrow (first)
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
+import Data.Dynamic (Dynamic)
 import qualified Data.Vault.Lazy as Vault
 import Network.HPACK
 import Network.HPACK.Token
@@ -37,15 +38,15 @@ type ToReq = (TokenHeaderList,ValueTable) -> Maybe Int -> IO ByteString -> T.Han
 http30 :: H.HttpVersion
 http30 = H.HttpVersion 3 0
 
-toRequest :: InternalInfo -> S.Settings -> SockAddr -> ToReq
-toRequest ii settings addr ht bodylen body th transport = do
+toRequest :: InternalInfo -> S.Settings -> SockAddr -> Maybe Dynamic -> ToReq
+toRequest ii settings addr mctx ht bodylen body th transport = do
     ref <- newIORef Nothing
-    toRequest' ii settings addr ref ht bodylen body th transport
+    toRequest' ii settings addr mctx ref ht bodylen body th transport
 
-toRequest' :: InternalInfo -> S.Settings -> SockAddr
+toRequest' :: InternalInfo -> S.Settings -> SockAddr -> Maybe Dynamic
            -> IORef (Maybe HTTP2Data)
            -> ToReq
-toRequest' ii settings addr ref (reqths,reqvt) bodylen body th transport = return req
+toRequest' ii settings addr mctx ref (reqths,reqvt) bodylen body th transport = return req
   where
     !req = Request {
         requestMethod = colonMethod
@@ -59,7 +60,8 @@ toRequest' ii settings addr ref (reqths,reqvt) bodylen body th transport = retur
       , remoteHost = addr
       , requestBody = body
       , vault = vaultValue
-      , requestBodyLength = maybe ChunkedBody (KnownLength . fromIntegral) bodylen
+      , requestConnContext     = mctx
+      , requestBodyLength      = maybe ChunkedBody (KnownLength . fromIntegral) bodylen
       , requestHeaderHost      = mHost <|> mAuth
       , requestHeaderRange     = mRange
       , requestHeaderReferer   = mReferer

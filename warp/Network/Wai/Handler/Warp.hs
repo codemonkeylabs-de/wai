@@ -135,6 +135,7 @@ import qualified Data.Vault.Lazy as Vault
 #ifdef MIN_VERSION_x509
 import Data.X509
 #endif
+import Data.Dynamic (Dynamic)
 import qualified Network.HTTP.Types as H
 import Network.Socket (Socket, SockAddr)
 import Network.Wai (Request, Response, vault)
@@ -379,7 +380,7 @@ setFork fork' s = s { settingsFork = fork' }
 -- Default: 'defaultAccept'
 --
 -- Since 3.3.24
-setAccept :: (Socket -> IO (Socket, SockAddr)) -> Settings -> Settings
+setAccept :: (Socket -> IO (Socket, SockAddr, Maybe Dynamic)) -> Settings -> Settings
 setAccept accept' s = s { settingsAccept = accept' }
 
 -- | Do not use the PROXY protocol.

@@ -57,6 +57,7 @@ module Network.Wai
     , requestBody
     , vault
     , requestBodyLength
+    , requestConnContext
     , requestHeaderHost
     , requestHeaderRange
     , requestHeaderReferer
@@ -282,6 +283,7 @@ defaultRequest = Request
     , queryString = []
     , requestBody = return B.empty
     , vault = mempty
+    , requestConnContext = Nothing
     , requestBodyLength = KnownLength 0
     , requestHeaderHost = Nothing
     , requestHeaderRange = Nothing

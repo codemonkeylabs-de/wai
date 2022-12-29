@@ -7,12 +7,12 @@
 
 module Network.Wai.Handler.Warp.Run where
 
-import Control.Arrow (first)
 import qualified Control.Exception
 import Control.Exception (allowInterrupt)
 import qualified Data.ByteString as S
 import Data.IORef (newIORef, readIORef)
 import Data.Streaming.Network (bindPortTCP)
+import Data.Dynamic (Dynamic)
 import Foreign.C.Error (Errno(..), eCONNABORTED, eMFILE)
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
 import Network.Socket (Socket, close, withSocketsDo, SockAddr, setSocketOption, SocketOption(..))
@@ -154,12 +154,12 @@ runSettingsSocket set@Settings{settingsAccept = accept'} socket app = do
     runSettingsConnection set getConn app
   where
     getConn = do
-        (s, sa) <- accept' socket
+        (s, sa, mctx) <- accept' socket
         setSocketCloseOnExec s
         -- NoDelay causes an error for AF_UNIX.
         setSocketOption s NoDelay 1 `UnliftIO.catchAny` \(UnliftIO.SomeException _) -> return ()
         conn <- socketConnection set s
-        return (conn, sa)
+        return (conn, sa, mctx)
 
     closeListenSocket = close socket
 
@@ -172,20 +172,20 @@ runSettingsSocket set@Settings{settingsAccept = accept'} socket app = do
 -- in a separate worker thread instead of the main server loop.
 --
 -- Since 1.3.5
-runSettingsConnection :: Settings -> IO (Connection, SockAddr) -> Application -> IO ()
+runSettingsConnection :: Settings -> IO (Connection, SockAddr, Maybe Dynamic) -> Application -> IO ()
 runSettingsConnection set getConn app = runSettingsConnectionMaker set getConnMaker app
   where
     getConnMaker = do
-      (conn, sa) <- getConn
-      return (return conn, sa)
+      (conn, sa, mctx) <- getConn
+      return (return conn, sa, mctx)
 
 -- | This modifies the connection maker so that it returns 'TCP' for 'Transport'
 -- (i.e. plain HTTP) then calls 'runSettingsConnectionMakerSecure'.
-runSettingsConnectionMaker :: Settings -> IO (IO Connection, SockAddr) -> Application -> IO ()
+runSettingsConnectionMaker :: Settings -> IO (IO Connection, SockAddr, Maybe Dynamic) -> Application -> IO ()
 runSettingsConnectionMaker x y =
     runSettingsConnectionMakerSecure x (toTCP <$> y)
   where
-    toTCP = first ((, TCP) <$>)
+    toTCP (ioConn, sa, mctx) = ((, TCP) <$> ioConn, sa, mctx)
 
 ----------------------------------------------------------------
 
@@ -195,7 +195,7 @@ runSettingsConnectionMaker x y =
 -- or HTTP over TLS.
 --
 -- Since 2.1.4
-runSettingsConnectionMakerSecure :: Settings -> IO (IO (Connection, Transport), SockAddr) -> Application -> IO ()
+runSettingsConnectionMakerSecure :: Settings -> IO (IO (Connection, Transport), SockAddr, Maybe Dynamic) -> Application -> IO ()
 runSettingsConnectionMakerSecure set getConnMaker app = do
     settingsBeforeMainLoop set
     counter <- newCounter
@@ -237,7 +237,7 @@ withII set action =
 --
 -- Our approach is explained in the comments below.
 acceptConnection :: Settings
-                 -> IO (IO (Connection, Transport), SockAddr)
+                 -> IO (IO (Connection, Transport), SockAddr, Maybe Dynamic)
                  -> Application
                  -> Counter
                  -> InternalInfo
@@ -268,8 +268,8 @@ acceptConnection set getConnMaker app counter ii = do
         mx <- acceptNewConnection
         case mx of
             Nothing             -> return ()
-            Just (mkConn, addr) -> do
-                fork set mkConn addr app counter ii
+            Just (mkConn, addr, mctx) -> do
+                fork set mkConn addr mctx app counter ii
                 acceptLoop
 
     acceptNewConnection = do
@@ -292,11 +292,12 @@ acceptConnection set getConnMaker app counter ii = do
 fork :: Settings
      -> IO (Connection, Transport)
      -> SockAddr
+     -> Maybe Dynamic
      -> Application
      -> Counter
      -> InternalInfo
      -> IO ()
-fork set mkConn addr app counter ii = settingsFork set $ \unmask ->
+fork set mkConn addr mctx app counter ii = settingsFork set $ \unmask ->
     -- Call the user-supplied on exception code if any
     -- exceptions are thrown.
     --
@@ -333,7 +334,7 @@ fork set mkConn addr app counter ii = settingsFork set $ \unmask ->
            UnliftIO.bracket (onOpen addr) (onClose addr) $ \goingon ->
            -- Actually serve this connection.  bracket with closeConn
            -- above ensures the connection is closed.
-           when goingon $ serveConnection conn ii th addr transport set app
+           when goingon $ serveConnection conn ii th addr mctx transport set app
       where
         register = T.registerKillThread (timeoutManager ii) (connClose conn)
         cancel   = T.cancel
@@ -345,11 +346,12 @@ serveConnection :: Connection
                 -> InternalInfo
                 -> T.Handle
                 -> SockAddr
+                -> Maybe Dynamic
                 -> Transport
                 -> Settings
                 -> Application
                 -> IO ()
-serveConnection conn ii th origAddr transport settings app = do
+serveConnection conn ii th origAddr mctx transport settings app = do
     -- fixme: Upgrading to HTTP/2 should be supported.
     (h2,bs) <- if isHTTP2 transport then
                    return (True, "")
@@ -360,9 +362,9 @@ serveConnection conn ii th origAddr transport settings app = do
                      else
                        return (False, bs0)
     if settingsHTTP2Enabled settings && h2 then do
-        http2 settings ii conn transport app origAddr th bs
+        http2 settings ii conn transport app origAddr mctx th bs
       else do
-        http1 settings ii conn transport app origAddr th bs
+        http1 settings ii conn transport app origAddr mctx th bs
 
 -- | Set flag FileCloseOnExec flag on a socket (on Unix)
 --

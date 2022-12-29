@@ -12,6 +12,7 @@ module Network.Wai.Handler.Warp.HTTP2 (
 import qualified Data.ByteString as BS
 import Data.IORef (IORef, newIORef, writeIORef, readIORef)
 import qualified Data.IORef as I
+import Data.Dynamic (Dynamic)
 import qualified Network.HTTP2.Frame as H2
 import qualified Network.HTTP2.Server as H2
 import Network.Socket (SockAddr)
@@ -31,8 +32,8 @@ import Network.Wai.Handler.Warp.Types
 
 ----------------------------------------------------------------
 
-http2 :: S.Settings -> InternalInfo -> Connection -> Transport -> Application -> SockAddr -> T.Handle -> ByteString -> IO ()
-http2 settings ii conn transport app origAddr th bs = do
+http2 :: S.Settings -> InternalInfo -> Connection -> Transport -> Application -> SockAddr -> Maybe Dynamic -> T.Handle -> ByteString -> IO ()
+http2 settings ii conn transport app origAddr mctx th bs = do
     istatus <- newIORef False
     rawRecvN <- makeReceiveN bs (connRecv conn) (connRecvBuf conn)
     writeBuffer <- readIORef $ connWriteBuffer conn
@@ -55,7 +56,7 @@ http2 settings ii conn transport app origAddr th bs = do
           }
     checkTLS
     setConnHTTP2 conn True
-    H2.run conf $ http2server settings ii transport origAddr app
+    H2.run conf $ http2server settings ii transport origAddr mctx app
   where
     checkTLS = case transport of
         TCP -> return () -- direct
@@ -69,9 +70,10 @@ http2server :: S.Settings
             -> InternalInfo
             -> Transport
             -> SockAddr
+            -> Maybe Dynamic
             -> Application
             -> H2.Server
-http2server settings ii transport addr app h2req0 aux0 response = do
+http2server settings ii transport addr mctx app h2req0 aux0 response = do
     req <- toWAIRequest h2req0 aux0
     ref <- I.newIORef Nothing
     eResponseReceived <- UnliftIO.tryAny $ app req $ \rsp -> do
@@ -96,7 +98,7 @@ http2server settings ii transport addr app h2req0 aux0 response = do
             logResponse req st msiz
     return ()
   where
-    toWAIRequest h2req aux = toRequest ii settings addr hdr bdylen bdy th transport
+    toWAIRequest h2req aux = toRequest ii settings addr mctx hdr bdylen bdy th transport
       where
         !hdr = H2.requestHeaders h2req
         !bdy = H2.getRequestBodyChunk h2req

@@ -62,6 +62,7 @@ import Data.Default.Class (def)
 import qualified Data.IORef as I
 import Data.Streaming.Network (bindPortTCP, safeRecv)
 import Data.Typeable (Typeable)
+import Data.Dynamic (Dynamic)
 import GHC.IO.Exception (IOErrorType(..))
 import Network.Socket (
     SockAddr,
@@ -277,11 +278,11 @@ alpn xs
 
 ----------------------------------------------------------------
 
-getter :: TLS.TLSParams params => TLSSettings -> Settings -> Socket -> params -> IO (IO (Connection, Transport), SockAddr)
+getter :: TLS.TLSParams params => TLSSettings -> Settings -> Socket -> params -> IO (IO (Connection, Transport), SockAddr, Maybe Dynamic)
 getter tlsset set@Settings{settingsAccept = accept'} sock params = do
-    (s, sa) <- accept' sock
+    (s, sa, mctx) <- accept' sock
     setSocketCloseOnExec s
-    return (mkConn tlsset set s params, sa)
+    return (mkConn tlsset set s params, sa, mctx)
 
 mkConn :: TLS.TLSParams params => TLSSettings -> Settings -> Socket -> params -> IO (Connection, Transport)
 mkConn tlsset set s params = (safeRecv s 4096 >>= switch) `onException` close s

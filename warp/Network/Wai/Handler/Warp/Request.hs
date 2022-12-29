@@ -18,6 +18,7 @@ module Network.Wai.Handler.Warp.Request (
 import qualified Control.Concurrent as Conc (yield)
 import UnliftIO (throwIO, Exception)
 import Data.Array ((!))
+import Data.Dynamic (Dynamic)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Unsafe as SU
 import qualified Data.CaseInsensitive as CI
@@ -54,6 +55,7 @@ recvRequest :: Bool -- ^ first request on this connection?
             -> InternalInfo
             -> Timeout.Handle
             -> SockAddr -- ^ Peer's address.
+            -> Maybe Dynamic -- ^ Connection specific opaque context
             -> Source -- ^ Where HTTP request comes from.
             -> Transport
             -> IO (Request
@@ -65,7 +67,7 @@ recvRequest :: Bool -- ^ first request on this connection?
             -- 'IndexedHeader' of HTTP request for internal use,
             -- Body producing action used for flushing the request body
 
-recvRequest firstRequest settings conn ii th addr src transport = do
+recvRequest firstRequest settings conn ii th addr mctx src transport = do
     hdrlines <- headerLines (settingsMaxTotalHeaderLength settings) firstRequest src
     (method, unparsedPath, path, query, httpversion, hdr) <- parseHeaderLines hdrlines
     let idxhdr = indexRequestHeader hdr
@@ -97,7 +99,8 @@ recvRequest firstRequest settings conn ii th addr src transport = do
           , remoteHost        = addr
           , requestBody       = rbody'
           , vault             = vaultValue
-          , requestBodyLength = bodyLength
+          , requestConnContext     = mctx
+          , requestBodyLength      = bodyLength
           , requestHeaderHost      = idxhdr ! fromEnum ReqHost
           , requestHeaderRange     = idxhdr ! fromEnum ReqRange
           , requestHeaderReferer   = idxhdr ! fromEnum ReqReferer

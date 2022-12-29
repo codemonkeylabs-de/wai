@@ -10,6 +10,7 @@ import GHC.Prim (fork#)
 import UnliftIO (SomeException, fromException)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Builder as Builder
+import Data.Dynamic (Dynamic)
 import Data.Streaming.Network (HostPreference)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -68,7 +69,7 @@ data Settings = Settings
       --
       -- Since 3.0.4
 
-    , settingsAccept :: Socket -> IO (Socket, SockAddr)
+    , settingsAccept :: Socket -> IO (Socket, SockAddr, Maybe Dynamic)
       -- ^ Code to accept a new connection.
       --
       -- Useful if you need to provide connected sockets from something other
@@ -291,10 +292,12 @@ defaultFork io =
 -- | Standard "accept" call for a listening socket.
 --
 -- @since 3.3.24
-defaultAccept :: Socket -> IO (Socket, SockAddr)
+defaultAccept :: Socket -> IO (Socket, SockAddr, Maybe Dynamic)
 defaultAccept =
 #if WINDOWS
     windowsThreadBlockHack . accept
 #else
     accept
 #endif
+      >=> \(s, a) ->
+            return (s, a, Nothing)

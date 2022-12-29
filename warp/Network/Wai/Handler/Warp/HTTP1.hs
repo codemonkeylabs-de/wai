@@ -14,6 +14,7 @@ import qualified UnliftIO
 import UnliftIO (SomeException, fromException, throwIO)
 import qualified Data.ByteString as BS
 import Data.Char (chr)
+import Data.Dynamic (Dynamic)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Network.Socket (SockAddr(SockAddrInet, SockAddrInet6))
 import Network.Wai
@@ -28,13 +29,13 @@ import Network.Wai.Handler.Warp.Response
 import Network.Wai.Handler.Warp.Settings
 import Network.Wai.Handler.Warp.Types
 
-http1 :: Settings -> InternalInfo -> Connection -> Transport -> Application -> SockAddr -> T.Handle -> ByteString -> IO ()
-http1 settings ii conn transport app origAddr th bs0 = do
+http1 :: Settings -> InternalInfo -> Connection -> Transport -> Application -> SockAddr -> Maybe Dynamic -> T.Handle -> ByteString -> IO ()
+http1 settings ii conn transport app origAddr mctx th bs0 = do
     istatus <- newIORef True
     src <- mkSource (wrappedRecv conn istatus (settingsSlowlorisSize settings))
     leftoverSource src bs0
     addr <- getProxyProtocolAddr src
-    http1server settings ii conn transport app addr th istatus src
+    http1server settings ii conn transport app addr mctx th istatus src
   where
     wrappedRecv Connection { connRecv = recv } istatus slowlorisSize = do
         bs <- recv
@@ -83,8 +84,8 @@ http1 settings ii conn transport app origAddr th bs0 = do
 
     decodeAscii = map (chr . fromEnum) . BS.unpack
 
-http1server :: Settings -> InternalInfo -> Connection -> Transport -> Application  -> SockAddr -> T.Handle -> IORef Bool -> Source -> IO ()
-http1server settings ii conn transport app addr th istatus src =
+http1server :: Settings -> InternalInfo -> Connection -> Transport -> Application  -> SockAddr -> Maybe Dynamic -> T.Handle -> IORef Bool -> Source -> IO ()
+http1server settings ii conn transport app addr mctx th istatus src =
     loop True `UnliftIO.catchAny` handler
   where
     handler e
@@ -98,7 +99,7 @@ http1server settings ii conn transport app addr th istatus src =
           throwIO e
 
     loop firstRequest = do
-        (req, mremainingRef, idxhdr, nextBodyFlush) <- recvRequest firstRequest settings conn ii th addr src transport
+        (req, mremainingRef, idxhdr, nextBodyFlush) <- recvRequest firstRequest settings conn ii th addr mctx src transport
         keepAlive <- processRequest settings ii conn app th istatus src req mremainingRef idxhdr nextBodyFlush
             `UnliftIO.catchAny` \e -> do
                 settingsOnException settings (Just req) e
