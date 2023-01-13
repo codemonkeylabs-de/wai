@@ -339,8 +339,8 @@ fork set mkConn addr mctx app counter ii = settingsFork set $ \unmask ->
         register = T.registerKillThread (timeoutManager ii) (connClose conn)
         cancel   = T.cancel
 
-    onOpen adr    = increase counter >> settingsOnOpen  set adr
-    onClose adr _ = decrease counter >> settingsOnClose set adr
+    onOpen adr    = increase counter >> settingsOnOpen  set adr mctx
+    onClose adr _ = decrease counter >> settingsOnClose set adr mctx
 
 serveConnection :: Connection
                 -> InternalInfo

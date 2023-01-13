@@ -44,8 +44,8 @@ data Settings = Settings
       -- Default: 500, text/plain, \"Something went wrong\"
       --
       -- Since 2.0.3
-    , settingsOnOpen :: SockAddr -> IO Bool -- ^ What to do when a connection is open. When 'False' is returned, the connection is closed immediately. Otherwise, the connection is going on. Default: always returns 'True'.
-    , settingsOnClose :: SockAddr -> IO ()  -- ^ What to do when a connection is close. Default: do nothing.
+    , settingsOnOpen :: SockAddr -> Maybe Dynamic -> IO Bool -- ^ What to do when a connection is open. When 'False' is returned, the connection is closed immediately. Otherwise, the connection is going on. Default: always returns 'True'.
+    , settingsOnClose :: SockAddr -> Maybe Dynamic -> IO ()  -- ^ What to do when a connection is close. Default: do nothing.
     , settingsTimeout :: Int -- ^ Timeout value in seconds. Default value: 30
     , settingsManager :: Maybe Manager -- ^ Use an existing timeout manager instead of spawning a new one. If used, 'settingsTimeout' is ignored. Default is 'Nothing'
     , settingsFdCacheDuration :: Int -- ^ Cache duration time of file descriptors in seconds. 0 means that the cache mechanism is not used. Default value: 0
@@ -182,8 +182,8 @@ defaultSettings = Settings
     , settingsHost = "*4"
     , settingsOnException = defaultOnException
     , settingsOnExceptionResponse = defaultOnExceptionResponse
-    , settingsOnOpen = const $ return True
-    , settingsOnClose = const $ return ()
+    , settingsOnOpen = \_ _ -> return True
+    , settingsOnClose = \_ _ -> return ()
     , settingsTimeout = 30
     , settingsManager = Nothing
     , settingsFdCacheDuration = 0

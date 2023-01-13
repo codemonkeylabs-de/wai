@@ -193,13 +193,13 @@ setOnExceptionResponse x y = y { settingsOnExceptionResponse = x }
 -- Default: always returns 'True'.
 --
 -- Since 2.1.0
-setOnOpen :: (SockAddr -> IO Bool) -> Settings -> Settings
+setOnOpen :: (SockAddr -> Maybe Dynamic -> IO Bool) -> Settings -> Settings
 setOnOpen x y = y { settingsOnOpen = x }
 
 -- | What to do when a connection is closed. Default: do nothing.
 --
 -- Since 2.1.0
-setOnClose :: (SockAddr -> IO ()) -> Settings -> Settings
+setOnClose :: (SockAddr -> Maybe Dynamic -> IO ()) -> Settings -> Settings
 setOnClose x y = y { settingsOnClose = x }
 
 -- | "Slow-loris" timeout lower-bound value in seconds.  Connections where
@@ -284,11 +284,11 @@ getHost :: Settings -> HostPreference
 getHost = settingsHost
 
 -- | Get the action on opening connection.
-getOnOpen :: Settings -> SockAddr -> IO Bool
+getOnOpen :: Settings -> SockAddr -> Maybe Dynamic -> IO Bool
 getOnOpen = settingsOnOpen
 
 -- | Get the action on closeing connection.
-getOnClose :: Settings -> SockAddr -> IO ()
+getOnClose :: Settings -> SockAddr -> Maybe Dynamic -> IO ()
 getOnClose = settingsOnClose
 
 -- | Get the exception handler.
